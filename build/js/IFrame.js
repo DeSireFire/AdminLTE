@@ -1,3 +1,5 @@
+// noinspection EqualityComparisonWithCoercionJS
+
 /**
  * --------------------------------------------
  * AdminLTE IFrame.js
@@ -53,6 +55,7 @@ const Default = {
   autoShowNewTab: true,
   autoDarkMode: false,
   allowDuplicates: false,
+  allowReload: true,
   loadingScreen: true,
   useNavbarItems: true,
   scrollOffset: 40,
@@ -105,7 +108,11 @@ class IFrame {
     if (autoOpen) {
       if (this._config.loadingScreen) {
         const $loadingScreen = $(SELECTOR_TAB_LOADING)
-        $loadingScreen.fadeIn()
+
+        if (!$loadingScreen.is(':animated')) {
+          $loadingScreen.fadeIn()
+        }
+
         $(`${tabId} iframe`).ready(() => {
           if (typeof this._config.loadingScreen === 'number') {
             this.switchTab(`#${navId}`)
@@ -142,11 +149,11 @@ class IFrame {
       return
     }
 
-    const uniqueName = link.replace('./', '').replace(/["#&'./:=?[\]]/gi, '-').replace(/(--)/gi, '')
+    const uniqueName = unescape(link).replace('./', '').replace(/["#&'./:=?[\]]/gi, '-').replace(/(--)/gi, '')
     const navId = `tab-${uniqueName}`
 
     if (!this._config.allowDuplicates && $(`#${navId}`).length > 0) {
-      return this.switchTab(`#${navId}`)
+      return this.switchTab(`#${navId}`, this._config.allowReload)
     }
 
     if ((!this._config.allowDuplicates && $(`#${navId}`).length === 0) || this._config.allowDuplicates) {
@@ -154,12 +161,35 @@ class IFrame {
     }
   }
 
-  switchTab(item) {
+  switchTab(item, reload = false) {
     const $item = $(item)
     const tabId = $item.attr('href')
 
     $(SELECTOR_TAB_EMPTY).hide()
+
+    if (reload) {
+      const $loadingScreen = $(SELECTOR_TAB_LOADING)
+      if (this._config.loadingScreen) {
+        $loadingScreen.show(0, () => {
+          $(`${tabId} iframe`).attr('src', $(`${tabId} iframe`).attr('src')).ready(() => {
+            if (this._config.loadingScreen) {
+              if (typeof this._config.loadingScreen === 'number') {
+                setTimeout(() => {
+                  $loadingScreen.fadeOut()
+                }, this._config.loadingScreen)
+              } else {
+                $loadingScreen.fadeOut()
+              }
+            }
+          })
+        })
+      } else {
+        $(`${tabId} iframe`).attr('src', $(`${tabId} iframe`).attr('src'))
+      }
+    }
+
     $(`${SELECTOR_TAB_NAVBAR_NAV} .active`).tab('dispose').removeClass('active')
+
     this._fixHeight()
 
     $item.tab('show')
@@ -227,18 +257,22 @@ class IFrame {
   // Private
 
   _init() {
-    if ($(SELECTOR_TAB_CONTENT).children().length > 2) {
-      const $el = $(`${SELECTOR_TAB_PANE}:first-child`)
-      $el.show()
-      this._setItemActive($el.find('iframe').attr('src'))
-    }
+    const usingDefTab = ($(SELECTOR_TAB_CONTENT).children().length > 2)
 
     this._setupListeners()
     this._fixHeight(true)
+
+    if (usingDefTab) {
+      const $el = $(`${SELECTOR_TAB_PANE}`).first()
+      const uniqueName = $el.attr('id').replace('panel-', '')
+      const navId = `#tab-${uniqueName}`
+
+      this.switchTab(navId, true)
+    }
   }
 
   _initFrameElement() {
-    if (window.frameElement && this._config.autoIframeMode) {
+    if (window.frameElement && this._config?.autoIframeMode) {
       const $body = $('body')
       $body.addClass(CLASS_NAME_IFRAME_MODE)
 
@@ -259,7 +293,7 @@ class IFrame {
         this._fixHeight()
       }, 1)
     })
-    if ($('body').hasClass(CLASS_NAME_IFRAME_MODE)) {
+    if ($(SELECTOR_CONTENT_WRAPPER).hasClass(CLASS_NAME_IFRAME_MODE)) {
       $(document).on('click', `${SELECTOR_SIDEBAR_MENU_ITEM}, ${SELECTOR_SIDEBAR_SEARCH_ITEM}`, e => {
         e.preventDefault()
         this.openTabSidebar(e.target)
@@ -286,7 +320,7 @@ class IFrame {
       e.preventDefault()
       let { target } = e
 
-      if (target.nodeName == 'I') {
+      if (target.nodeName === 'I') {
         target = e.target.offsetParent
       }
 
@@ -381,8 +415,8 @@ class IFrame {
   }
 
   // Static
-
-  static _jQueryInterface(config) {
+  // eslint-disable-next-line max-params
+  static _jQueryInterface(config, name, link, id, reload) {
     if ($(SELECTOR_DATA_TOGGLE).length > 0) {
       let data = $(this).data(DATA_KEY)
 
@@ -392,16 +426,14 @@ class IFrame {
 
       const _options = $.extend({}, Default, typeof config === 'object' ? config : data)
       localStorage.setItem('AdminLTE:IFrame:Options', JSON.stringify(_options))
-
       const plugin = new IFrame($(this), _options)
-
-      $(this).data(DATA_KEY, typeof config === 'object' ? config : data)
-
+      window.iFrameInstance = plugin
+      $(this).data(DATA_KEY, typeof config === 'object' ? config : { link, name, id, reload, ...data })
       if (typeof config === 'string' && /createTab|openTabSidebar|switchTab|removeActiveTab/.test(config)) {
-        plugin[config]()
+        plugin[config](name, link, id, reload)
       }
     } else {
-      new IFrame($(this), JSON.parse(localStorage.getItem('AdminLTE:IFrame:Options')))._initFrameElement()
+      window.iFrameInstance = new IFrame($(this), JSON.parse(localStorage.getItem('AdminLTE:IFrame:Options')))._initFrameElement()
     }
   }
 }

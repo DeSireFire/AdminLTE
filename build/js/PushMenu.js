@@ -18,6 +18,7 @@ const EVENT_KEY = `.${DATA_KEY}`
 const JQUERY_NO_CONFLICT = $.fn[NAME]
 
 const EVENT_COLLAPSED = `collapsed${EVENT_KEY}`
+const EVENT_COLLAPSED_DONE = `collapsed-done${EVENT_KEY}`
 const EVENT_SHOWN = `shown${EVENT_KEY}`
 
 const SELECTOR_TOGGLE_BUTTON = '[data-widget="pushmenu"]'
@@ -33,7 +34,8 @@ const CLASS_NAME_CLOSED = 'sidebar-closed'
 const Default = {
   autoCollapseSize: 992,
   enableRemember: false,
-  noTransitionAfterReload: true
+  noTransitionAfterReload: true,
+  animationSpeed: 300
 }
 
 /**
@@ -44,7 +46,7 @@ const Default = {
 class PushMenu {
   constructor(element, options) {
     this._element = element
-    this._options = $.extend({}, Default, options)
+    this._options = options
 
     if ($(SELECTOR_OVERLAY).length === 0) {
       this._addOverlay()
@@ -88,6 +90,10 @@ class PushMenu {
     }
 
     $(this._element).trigger($.Event(EVENT_COLLAPSED))
+
+    setTimeout(() => {
+      $(this._element).trigger($.Event(EVENT_COLLAPSED_DONE))
+    }, this._options.animationSpeed)
   }
 
   toggle() {
@@ -169,19 +175,23 @@ class PushMenu {
   }
 
   // Static
-
-  static _jQueryInterface(operation) {
+  static _jQueryInterface(config) {
     return this.each(function () {
       let data = $(this).data(DATA_KEY)
-      const _options = $.extend({}, Default, $(this).data())
+      const _config = $.extend({}, Default, typeof config === 'object' ? config : $(this).data())
 
       if (!data) {
-        data = new PushMenu(this, _options)
+        data = new PushMenu($(this), _config)
         $(this).data(DATA_KEY, data)
-      }
+        data._init()
+      } else if (typeof config === 'string') {
+        if (typeof data[config] === 'undefined') {
+          throw new TypeError(`No method named "${config}"`)
+        }
 
-      if (typeof operation === 'string' && /collapse|expand|toggle/.test(operation)) {
-        data[operation]()
+        data[config]()
+      } else if (typeof config === 'undefined') {
+        data._init()
       }
     })
   }
